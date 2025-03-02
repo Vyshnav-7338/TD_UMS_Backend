@@ -149,9 +149,9 @@ router.get("/api/products/fetch/stats", auth.verifyUser, async (req, res) => {
     }
 });
 
-router.get("/api/users/remain-stock",auth.verifyUser, async (req, res) => {
+router.get("/api/users/:userId/remain-stock", async (req, res) => {
     try {
-        const  userId  = req.user.id;
+        const { userId } = req.params;
         if (!userId) {
             return res.status(400).json({ message: "Invalid user ID" });
         }
@@ -446,9 +446,9 @@ router.get("/api/sales/monthly-sales", auth.verifyUser, async (req, res) => {
 });
 
 
-router.get("/api/orders/user",auth.verifyUser, async (req, res) => {
+router.get("/api/orders/user/:userId", async (req, res) => {
     try {
-      const userId  = req.user.id;
+      const { userId } = req.params;
   
       if (!userId) {
         return res.status(400).json({ message: "Invalid user ID" });
@@ -458,7 +458,6 @@ router.get("/api/orders/user",auth.verifyUser, async (req, res) => {
         .populate("products.productId", "name price") 
         .populate("StoreAdmin", "name email") 
         .select("orderId products totalAmount paymentMethod referralUserName status createdAt");
-console.log(orders)
   
       res.json({ orders });
     } catch (error) {

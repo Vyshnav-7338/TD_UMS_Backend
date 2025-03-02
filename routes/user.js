@@ -207,9 +207,10 @@ router.put(
   }
 );
 
-router.get("/api/users/stocks",auth.verifyUser, async (req, res) => {
+router.get("/api/users/:userId/stocks-user", async (req, res) => {
   try {
-    const { userId } = req.user.id;
+    const { userId } = req.params;
+    console.log(userId)
     const user = await User.findById(userId)
       .populate("addedStocks.productId", "name price description")
       .lean();
@@ -217,6 +218,7 @@ router.get("/api/users/stocks",auth.verifyUser, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
     res.json({ addedStocks: user.addedStocks });
   } catch (error) {
     console.error("Error fetching added stocks:", error);
