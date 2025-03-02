@@ -250,13 +250,16 @@ const generateOrderId = () => {
 };
 
 
-router.get("/daily-orders", async (req, res) => {
+router.get("/daily-orders",auth.verifyUser, async (req, res) => {
     try {
+        const StoreAdmin = new mongoose.Types.ObjectId(req.user.id);
         const startDate = moment().subtract(7, "days").startOf("day");
         const orders = await Order.aggregate([
             {
                 $match: {
+                    StoreAdmin,
                     createdAt: { $gte: startDate.toDate() },
+
                 },
             },
             {
