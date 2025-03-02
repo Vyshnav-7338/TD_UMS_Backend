@@ -161,7 +161,7 @@ router.delete("/api/users/:id", auth.verifyUser, async (req, res) => {
 router.get("/api/user/profile", auth.verifyUser, async (req, res) => {
   try {
     console.log(req.user.id)
-    const user = await User.findById(req.user.id); // Adjust fields as needed
+    const user = await User.findById(req.user.id); 
     if (!user) return res.status(404).json({ message: "User not found" });
 
     res.json(user);
@@ -207,6 +207,22 @@ router.put(
   }
 );
 
+router.get("/api/users/stocks",auth.verifyUser, async (req, res) => {
+  try {
+    const { userId } = req.user.id;
+    const user = await User.findById(userId)
+      .populate("addedStocks.productId", "name price description")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json({ addedStocks: user.addedStocks });
+  } catch (error) {
+    console.error("Error fetching added stocks:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 
 module.exports = router;

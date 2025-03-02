@@ -149,6 +149,35 @@ router.get("/api/products/fetch/stats", auth.verifyUser, async (req, res) => {
     }
 });
 
+router.get("/api/users/remain-stock",auth.verifyUser, async (req, res) => {
+    try {
+        const  userId  = req.user.id;
+        if (!userId) {
+            return res.status(400).json({ message: "Invalid user ID" });
+        }
+
+        const products = await Product.find({
+            "stockAddedByUsers.userId": userId,
+        }).select("name productId price stockAddedByUsers");
+
+        const userStock = products.map((product) => ({
+            productId: product.productId,
+            name: product.name,
+            price: product.price,
+            stockAddedByUsers: product.stockAddedByUsers.map((entry) => ({
+                userId: entry.userId,
+                quantity: entry.quantity,
+                addedAt: entry.addedAt,
+            })),
+        }));
+
+        res.json({ userStock });
+    } catch (error) {
+        console.error("Error fetching user stock:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 
 router.post("/create-order", auth.verifyUser, async (req, res) => {
     try {
@@ -163,19 +192,25 @@ router.post("/create-order", auth.verifyUser, async (req, res) => {
             let stockDeducted = false;
 
             if (referralUserName) {
-                const referrerStockIndex = product.stockAddedByUsers.findIndex(
-                    (entry) => entry.userId.toString() === userId
-                );
-
-                if (referrerStockIndex !== -1 && product.stockAddedByUsers[referrerStockIndex].quantity >= item.quantity) {
-                    product.stockAddedByUsers[referrerStockIndex].quantity -= item.quantity;
-                    stockDeducted = true;
-                    product.stock -= item.quantity;
-                    product.userStock -= item.quantity;
-
-
+                let remainingQuantity = item.quantity;
+            
+                const sortedStockUsers = product.stockAddedByUsers
+                    .filter(entry => entry.userId.toString() === userId && entry.quantity > 0)
+                    .sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
+            
+                for (const stockEntry of sortedStockUsers) {
+                    if (remainingQuantity <= 0) break;
+            
+                    const availableStock = stockEntry.quantity;
+                    const deduction = Math.min(availableStock, remainingQuantity);
+            
+                    stockEntry.quantity -= deduction;
+                    product.stock -= deduction;
+                    product.userStock -= deduction;
+                    remainingQuantity -= deduction;
                 }
             }
+            
 
             if (!stockDeducted) {
                 if (product.stock < item.quantity) {
@@ -299,11 +334,19 @@ router.get("/api/order/stats", auth.verifyUser, async (req, res) => {
         res.status(500).json({ message: "Server error" });
     }
 });
+const mongoose = require("mongoose");
 
-router.get("/product-sales", async (req, res) => {
+router.get("/product-sales", auth.verifyUser, async (req, res) => {
     try {
+        const StoreAdmin = new mongoose.Types.ObjectId(req.user.id);
+
         const productSales = await Order.aggregate([
-            { $match: { products: { $exists: true, $ne: [] } } },
+            { 
+                $match: { 
+                    StoreAdmin, 
+                    products: { $exists: true, $ne: [] } 
+                } 
+            },
             { $unwind: "$products" },
             {
                 $group: {
@@ -319,21 +362,23 @@ router.get("/product-sales", async (req, res) => {
                     as: "productDetails",
                 },
             },
-            { $unwind: "$productDetails" },
+            { $unwind: { path: "$productDetails", preserveNullAndEmptyArrays: true } },
             {
                 $project: {
                     _id: 0,
-                    name: "$productDetails.name",
+                    name: { $ifNull: ["$productDetails.name", "Unknown Product"] },
                     value: "$totalQuantity",
                 },
             },
         ]);
+
+        console.log("Aggregated Product Sales:", productSales);
         res.json(productSales);
     } catch (error) {
         console.error("Error fetching product sales:", error);
         res.status(500).json({ message: "Server error" });
     }
-})
+});
 
 router.get("/api/stats/dashboard", auth.verifyUser, async (req, res) => {
     try {
@@ -400,5 +445,27 @@ router.get("/api/sales/monthly-sales", auth.verifyUser, async (req, res) => {
     }
 });
 
+
+router.get("/api/orders/user",auth.verifyUser, async (req, res) => {
+    try {
+      const userId  = req.user.id;
+  
+      if (!userId) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+  
+      const orders = await Order.find({ userId })
+        .populate("products.productId", "name price") 
+        .populate("StoreAdmin", "name email") 
+        .select("orderId products totalAmount paymentMethod referralUserName status createdAt");
+console.log(orders)
+  
+      res.json({ orders });
+    } catch (error) {
+      console.error("Error fetching user orders:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
 
 module.exports = router;
